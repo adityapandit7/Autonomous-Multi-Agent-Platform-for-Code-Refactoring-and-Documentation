@@ -207,7 +207,13 @@ class TestEvaluatorAgent:
             return_value=self._make_doc_verdict(0.85)
         )
 
-        final_state, _ = evaluator.run(state)
+        final_state, summary = evaluator.run(state)
+
+        scores = {}
+        if summary.refactor:
+            scores["refactor/confidence"] = summary.refactor.confidence
+        if summary.doc:
+            scores["doc/confidence"] = summary.doc.confidence
 
         assert "refactor/confidence" in final_state.evaluation_scores
         assert "doc/confidence" in final_state.evaluation_scores

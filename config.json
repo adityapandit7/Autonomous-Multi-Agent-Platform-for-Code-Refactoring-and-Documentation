@@ -3,7 +3,7 @@
   "version": "2.0.0",
   "language": "java",
   "dacos": {
-    "path": "C:\\Users\\Administrator\\Documents\\Major_Project_Java\\datasets\\dacos"
+    "path": ""
   },
   "models": {
     "base_model": "Salesforce/codet5p-770m",
@@ -12,7 +12,8 @@
     "max_input_length": 512,
     "max_output_length": 256,
     "num_beams": 2,
-    "device": "auto"
+    "device": "auto",
+    "use_safetensors": false
   },
   "thresholds": {
     "long_method_lines": 30,

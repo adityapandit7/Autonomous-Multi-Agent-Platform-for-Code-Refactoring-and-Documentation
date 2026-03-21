@@ -368,59 +368,40 @@ class RepoState:
     # Immutable state evolution
     # -----------------------------------------------------------------------
 
-    def evolve(
-        self,
-        agent_id: str,
-        action: str,
-        summary: str = "",
-        **changes: Any,
-    ) -> RepoState:
-        """
-        Return a new RepoState with the given fields replaced.
+    def evolve(self, agent_id: str, action: str, summary: str = "", **kwargs) -> "RepoState":
+        new_state = RepoState(
+            raw_code=kwargs.get("raw_code", self.raw_code),
+            classes=kwargs.get("classes", self.classes),
+            functions=kwargs.get("functions", self.functions),
+            imports=kwargs.get("imports", self.imports),
+            metadata=kwargs.get("metadata", self.metadata),
 
-        Parameters
-        ----------
-        agent_id    The agent triggering this transition (for provenance).
-        action      Short action name, e.g. "add_smell" or "complete_task".
-        summary     Optional human-readable description of the change.
-        **changes   Any RepoState fields to override in the new version.
+            smells=kwargs.get("smells", self.smells),
+            tasks=kwargs.get("tasks", self.tasks),
 
-        Note: `version` and `provenance_log` are managed automatically and
-        must NOT be passed in **changes.
-        """
-        if "version" in changes or "provenance_log" in changes:
-            raise ValueError(
-                "Do not pass 'version' or 'provenance_log' to evolve(); "
-                "they are managed automatically."
-            )
+            refactor_results=kwargs.get("refactor_results", self.refactor_results),
+            documentation_results=kwargs.get("documentation_results", self.documentation_results),
 
-        new_provenance = list(self.provenance_log) + [
-            ProvenanceEntry(
-                version=self.version + 1,
-                agent_id=agent_id,
-                action=action,
-                summary=summary,
-            )
-        ]
+            # ✅ THIS IS THE FIX
+            evaluation_scores=kwargs.get("evaluation_scores", self.evaluation_scores),
 
-        data: dict[str, Any] = {
-            "raw_code": self.raw_code,
-            "classes": self.classes,
-            "functions": self.functions,
-            "imports": self.imports,
-            "metadata": self.metadata,
-            "smells": self.smells,
-            "tasks": self.tasks,
-            "refactor_results": self.refactor_results,
-            "documentation_results": self.documentation_results,
-            "evaluation_scores": self.evaluation_scores,
-            "completed_tasks": self.completed_tasks,
-            "provenance_log": new_provenance,
-            "version": self.version + 1,
-        }
-        data.update(changes)
+            completed_tasks=kwargs.get("completed_tasks", self.completed_tasks),
 
-        return RepoState(**data)
+            provenance_log=self.provenance_log + [
+                ProvenanceEntry(
+                    version=self.version + 1,
+                    agent_id=agent_id,
+                    action=action,
+                    summary=summary,
+                )
+            ],
+
+            version=self.version + 1,
+
+
+    )
+
+        return new_state
 
     # -----------------------------------------------------------------------
     # Convenience query helpers — agents call these instead of filtering lists

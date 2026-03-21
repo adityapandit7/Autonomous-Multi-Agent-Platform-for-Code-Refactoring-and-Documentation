@@ -1,3 +1,8 @@
+import os as _os
+# Prevent transformers from contacting HuggingFace Hub during model load
+_os.environ.setdefault('TRANSFORMERS_OFFLINE', '1')
+_os.environ.setdefault('HF_HUB_OFFLINE', '1')
+
 #!/usr/bin/env python3
 """
 main.py — Entry point for the Autonomous Multi-Agent Platform.

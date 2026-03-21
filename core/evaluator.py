@@ -153,69 +153,54 @@ class EvaluatorAgent:
     # Public entry point
     # ------------------------------------------------------------------
 
-    def run(self, repo_state: RepoState) -> tuple[RepoState, EvaluationSummary]:
+    def run(self, repo_state):
         """
         Evaluate all completed results in repo_state.
-
-        Evaluation order
-        ----------------
-        1. Refactor results   → analyze_refactoring() per result
-        2. Documentation results → evaluate_documentation() per result
-        3. Aggregate scores → written into RepoState.evaluation_scores
-        4. Return updated state + EvaluationSummary
-
-        Returns
-        -------
-        (new_state, summary)
-            new_state   RepoState with evaluation_scores populated.
-            summary     EvaluationSummary for routing decisions.
+        Returns (new_state, summary) with evaluation_scores populated.
         """
-        scores: dict[str, float] = dict(repo_state.evaluation_scores)
+        scores = dict(repo_state.evaluation_scores)
         summary = EvaluationSummary()
 
-        # ── Evaluate refactor results ─────────────────────────────────────
+        # Evaluate refactor results
         if repo_state.refactor_results:
             refactor_verdict = self._evaluate_refactor(repo_state, scores)
             summary.refactor = refactor_verdict
-            logger.info(
-                "Refactor evaluation: confidence=%.3f  accepted=%s  replan=%s",
-                refactor_verdict.confidence,
-                refactor_verdict.accepted,
-                refactor_verdict.needs_replan,
-            )
+            raw = refactor_verdict.raw
+            scores["refactor/confidence"]     = refactor_verdict.confidence
+            scores["refactor/ast_valid"]      = float(raw.get("ast_validity", {}).get("valid", False))
+            scores["refactor/style"]          = raw.get("style_metrics", {}).get("score", 0.0)
+            scores["refactor/codebleu"]       = raw.get("codebleu_score", 0.0)
+            scores["refactor/semantic"]       = raw.get("semantic_preservation", {}).get("score", 0.0)
+            scores["refactor/improvement"]    = raw.get("improvement", {}).get("score", 0.0)
+            scores["refactor/loc_original"]   = raw.get("improvement", {}).get("loc_original", 0)
+            scores["refactor/loc_refactored"] = raw.get("improvement", {}).get("loc_refactored", 0)
+            logger.info("Refactor evaluation: confidence=%.3f", refactor_verdict.confidence)
 
-        # ── Evaluate documentation results ────────────────────────────────
+        # Evaluate documentation results
         if repo_state.documentation_results:
             doc_verdict = self._evaluate_doc(repo_state, scores)
             summary.doc = doc_verdict
-            logger.info(
-                "Doc evaluation: confidence=%.3f  accepted=%s  replan=%s",
-                doc_verdict.confidence,
-                doc_verdict.accepted,
-                doc_verdict.needs_replan,
-            )
+            raw = doc_verdict.raw
+            scores["doc/confidence"]   = doc_verdict.confidence
+            scores["doc/coverage"]     = raw.get("coverage", {}).get("score", 0.0)
+            scores["doc/completeness"] = raw.get("completeness", {}).get("score", 0.0)
+            logger.info("Doc evaluation: confidence=%.3f", doc_verdict.confidence)
 
-        # ── Human escalation warning ──────────────────────────────────────
         if summary.any_needs_human:
-            logger.warning(
-                "One or more results are in the borderline band [%.2f, %.2f]. "
-                "Consider human review before accepting.",
-                *HUMAN_REVIEW_BAND,
-            )
+            logger.warning("One or more results in the borderline band — consider human review.")
 
-        # ── Write scores back into RepoState ─────────────────────────────
+        parts = []
+        if summary.refactor:
+            parts.append(f"refactor_conf={summary.refactor.confidence:.3f}")
+        if summary.doc:
+            parts.append(f"doc_conf={summary.doc.confidence:.3f}")
+
         new_state = repo_state.evolve(
             agent_id=AGENT_ID,
             action="evaluation_complete",
-            summary=(
-                f"refactor_conf={summary.refactor.confidence:.3f} "
-                f"doc_conf={summary.doc.confidence:.3f}"
-                if summary.refactor and summary.doc
-                else "partial evaluation"
-            ),
+            summary=" ".join(parts) or "partial evaluation",
             evaluation_scores=scores,
         )
-
         return new_state, summary
 
     # ------------------------------------------------------------------
@@ -276,14 +261,6 @@ class EvaluatorAgent:
         primary_conf = primary["confidence"]["score"]
 
         # Write to shared scores dict (namespace: "refactor/<metric>")
-        scores["refactor/confidence"]         = min_conf
-        scores["refactor/ast_valid"]          = float(primary["ast_validity"]["valid"])
-        scores["refactor/style"]              = primary["style_metrics"]["score"]
-        scores["refactor/codebleu"]           = primary["codebleu_score"]
-        scores["refactor/semantic"]           = primary["semantic_preservation"]["score"]
-        scores["refactor/improvement"]        = primary["improvement"]["score"]
-        scores["refactor/loc_original"]       = primary["improvement"]["loc_original"]
-        scores["refactor/loc_refactored"]     = primary["improvement"]["loc_refactored"]
 
         return self._make_verdict(
             confidence=min_conf,
@@ -334,9 +311,6 @@ class EvaluatorAgent:
 
         min_conf = min(e["confidence"]["score"] for e in all_evals)
 
-        scores["doc/confidence"]    = min_conf
-        scores["doc/coverage"]      = primary["coverage"]["score"]
-        scores["doc/completeness"]  = primary["completeness"]["score"]
 
         return self._make_verdict(
             confidence=min_conf,
